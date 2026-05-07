@@ -1,0 +1,4 @@
+dataset_name,rows,rows_imputed,duplicates_flagged
+capteurs_temperature,66573,132,227
+capteurs_pression,65398,0,131
+releves_incidents,283,0,0

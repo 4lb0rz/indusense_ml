@@ -1,0 +1,4 @@
+dataset_name,target_column,recommended_method,mae,rmse,medae,bias,out_of_range_rate,distribution_drift,decision_reason
+capteurs_temperature,temperature_normalized,mean,1.6538049084052067,2.4603906944811103,1.5551820099775782,-0.03628030554136083,0.0,0.0005715009061810031,"Best trade-off on out-of-range rate, RMSE and MAE for capteurs_temperature.temperature_normalized"
+capteurs_pression,pressure_bar,mean,0.323615235436101,0.42770266990929545,0.2526425221469708,0.0036806867567081084,0.0,0.0,"Best trade-off on out-of-range rate, RMSE and MAE for capteurs_pression.pressure_bar"
+releves_incidents,severity,rule_based_no_imputation,,,,,,,"La severite est un champ critique qui doit etre conserve, rejete ou traite par regle metier explicite."
