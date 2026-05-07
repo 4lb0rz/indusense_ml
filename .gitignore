@@ -9,3 +9,11 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Datas
+datas/
+!datas/.gitkeep
+
+# Specifics OS files
+.DS_Store
+Thumbs.db
