@@ -1,41 +1,154 @@
 # InduSense
 
-## Modele cible pour l'ingestion PostgreSQL
+**A machine learning data pipeline for industrial sensor and incident data processing**
 
-L'exploration de `datas` met en evidence trois contraintes structurantes pour la suite du projet :
-- les trois sources ont des separateurs et des formats heterogenes ;
-- les identifiants machine doivent etre normalises avant toute jointure ;
-- la fenetre commune exploitable pour le croisement capteurs/incidents est centree sur la periode `2025-08-26` a `2026-02-25`, avec `15` machines communes apres harmonisation.
+InduSense is a PostgreSQL-based data ingestion and transformation platform designed to process heterogeneous sensor data (temperature, pressure) and incident reports from industrial machines. The project implements a Bronze-Silver-Gold data warehouse architecture to ensure data quality, traceability, and machine learning readiness.
 
-L'objectif de la prochaine etape n'est donc pas de charger directement les CSV dans une table finale, mais de preparer un modele relationnel qui permette :
-- l'atterrissage brut des fichiers ;
-- la tracabilite des traitements et des rejets ;
-- la construction de tables Silver normalisees ;
-- la production d'un Gold dataset horaire, pret pour l'entrainement et protege contre le data leakage.
+## Overview
 
-## Operations a realiser avant l'implementation Alembic / SQLAlchemy
+### Key Constraints
 
-1. Creer une couche `Bronze` qui conserve les lignes brutes, la provenance des fichiers et le statut d'ingestion.
-2. Normaliser les `machine_id`, les timestamps et les types de donnees avant de peupler la couche `Silver`.
-3. Pseudonymiser les informations operateur des incidents avant de sortir des tables brutes.
-4. Isoler les doublons, lignes invalides, timestamps mal formes et valeurs suspectes dans une table de qualite de donnees.
-5. Unifier les capteurs temperature et pression dans un fait Silver horodate par machine.
-6. Construire un Gold dataset par fenetre temporelle glissante, centre sur `machine x heure`, avec variables explicatives et label cible.
-7. Conserver la notion de `split_set` dans le Gold pour verrouiller les futurs jeux `train`, `validation` et `test` temporels.
+Data exploration identified three critical constraints:
+- The three data sources have heterogeneous separators and formats
+- Machine identifiers require normalization before any join operations
+- The common exploitable time window for sensor/incident cross-referencing spans **2025-08-26 to 2026-02-25**, with **15 machines** after harmonization
 
-## Proposition Mermaid
+### Design Goals
+
+Rather than directly loading CSV files into a final table, the architecture prepares a relational model that enables:
+- Raw file landing with full traceability
+- Processing lineage and rejection tracking
+- Normalized Silver-layer tables
+- Production-ready Gold dataset with hourly granularity, protected against data leakage
+
+## Architecture
+
+### Three-Layer Data Warehouse
+
+#### 🔴 Bronze Layer
+Preserves raw data as-is with:
+- Raw row content from source files
+- Source file lineage tracking
+- Ingestion status and batch information
+- Data quality issue flags
+
+#### 🟡 Silver Layer
+Normalized, deduplicated data with:
+- Standardized machine IDs, timestamps, and data types
+- Unified sensor readings (temperature + pressure) per machine per hour
+- Incident records with pseudonymized operator information
+- Isolated data quality issues and invalid records
+
+#### 🟢 Gold Layer
+Machine learning-ready dataset with:
+- Hourly features per machine (sliding window aggregations)
+- Explanatory variables and target labels
+- Temporal train/validation/test split definitions (preventing data leakage)
+- Ready for model training and evaluation
+
+## Project Structure
+
+```
+indusense_ml/
+├── src/indusense/
+│   ├── core/              # Core utilities (logging, settings)
+│   ├── db/                # Database models and session management
+│   ├── pipeline/          # ETL pipeline stages (bronze, silver, gold)
+│   ├── processing/        # Data processing and reporting logic
+│   ├── schemas/           # Pydantic validation schemas
+│   └── weather/           # External data fetchers (weather, etc.)
+├── alembic/               # Database migrations
+├── artifacts/             # Data ingestion reports and artifacts
+├── logs/                  # Application logs
+├── b1_explore.ipynb       # Exploratory data analysis notebook
+├── main.py                # Pipeline entry point
+├── pyproject.toml         # Project dependencies and metadata
+└── alembic.ini            # Alembic configuration
+```
+
+## Setup
+
+### Prerequisites
+- Python 3.13+
+- PostgreSQL 13+
+- pip or similar package manager
+
+### Installation
+
+1. **Clone and navigate to the project:**
+   ```bash
+   cd indusense_ml
+   ```
+
+2. **Create and activate a virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -e .
+   ```
+
+4. **Configure environment variables:**
+   Create a `.env` file in the project root:
+   ```
+   DATABASE_URL=postgresql+psycopg://user:password@localhost/indusense_ml
+   LOG_LEVEL=INFO
+   ```
+
+5. **Run database migrations:**
+   ```bash
+   alembic upgrade head
+   ```
+
+## Usage
+
+### Running the Full Pipeline
+
+```bash
+python main.py
+```
+
+This executes the complete ETL pipeline:
+1. **Bronze ingestion**: Loads raw data from source files
+2. **Silver transformation**: Normalizes and deduplicates data
+3. **Gold aggregation**: Creates machine learning features
+
+### Pipeline Components
+
+- **Bronze Pipeline** (`src/indusense/pipeline/bronze.py`): Raw data ingestion with lineage tracking
+- **Silver Pipeline** (`src/indusense/pipeline/silver.py`): Data normalization and deduplication
+- **Gold Pipeline** (`src/indusense/pipeline/gold.py`): Feature engineering and dataset preparation
+- **Data Ingestion** (`src/indusense/processing/ingestion.py`): Core ingestion logic
+- **Reporting** (`src/indusense/processing/reporting.py`): Data quality and processing reports
+
+## Technologies
+
+- **SQLAlchemy** (2.0+): ORM for database operations
+- **Alembic**: Database schema versioning and migrations
+- **Pydantic**: Data validation and schema definition
+- **Pandas**: Data manipulation and analysis
+- **PostgreSQL**: Relational database backend
+- **Loguru**: Advanced logging framework
+- **Python-dotenv**: Environment configuration management
+
+## Data Model
+
+### Entity Relationship Overview
 
 ```mermaid
 erDiagram
-    INGESTION_BATCH ||--o{ BRONZE_TEMPERATURE_RAW : charge
-    INGESTION_BATCH ||--o{ BRONZE_PRESSURE_RAW : charge
-    INGESTION_BATCH ||--o{ BRONZE_INCIDENT_RAW : charge
-    INGESTION_BATCH ||--o{ DATA_QUALITY_ISSUE : produit
+    INGESTION_BATCH ||--o{ BRONZE_TEMPERATURE_RAW : loads
+    INGESTION_BATCH ||--o{ BRONZE_PRESSURE_RAW : loads
+    INGESTION_BATCH ||--o{ BRONZE_INCIDENT_RAW : loads
+    INGESTION_BATCH ||--o{ DATA_QUALITY_ISSUE : produces
 
-    MACHINE ||--o{ SILVER_SENSOR_READING : emet
-    MACHINE ||--o{ SILVER_INCIDENT : subit
-    OPERATOR ||--o{ SILVER_INCIDENT : declare
-    MACHINE ||--o{ GOLD_MACHINE_HOURLY_FEATURE : alimente
+    MACHINE ||--o{ SILVER_SENSOR_READING : emits
+    MACHINE ||--o{ SILVER_INCIDENT : experiences
+    OPERATOR ||--o{ SILVER_INCIDENT : reports
+    MACHINE ||--o{ GOLD_MACHINE_HOURLY_FEATURE : feeds
 
     INGESTION_BATCH {
         uuid ingestion_batch_id PK
@@ -154,15 +267,31 @@ erDiagram
     }
 ```
 
-## Lecture proposee du modele
+### Data Model Philosophy
 
-- `Bronze` preserve la verite source, y compris les identifiants heterogenes, les formats d'horodatage et les lignes rejetables.
-- `Silver` porte les faits nettoyes et normalises, avec les drapeaux utiles a l'analyse qualite et a l'explicabilite.
-- `Gold` represente une table de features temporelles, a granularite stable, adaptee a un apprentissage supervise de prediction de panne.
+- **Bronze**: Preserves source truth, including heterogeneous identifiers, timestamp formats, and rejectable rows, with complete lineage tracking
+- **Silver**: Contains cleaned and normalized facts with quality flags useful for analysis and model interpretability
+- **Gold**: Temporal feature table with stable granularity, ready for supervised learning models predicting machine failures
 
-## Decision de modelisation a retravailler ensemble
+## Key Design Decisions
 
-- conserver ou non une cle technique `machine_id` en plus de `machine_code` ;
-- choisir la granularite cible du Gold : heure, quart d'heure, jour ;
-- definir l'horizon du label cible : panne dans `6h`, `12h`, `24h` ou `48h` ;
-- fixer les regles exactes de dedoublonnage et de gestion des valeurs manquantes avant le passage en Silver.
+The following architecture choices have been established:
+
+- ✅ Machine identifiers normalized using `machine_id` (PK) and `machine_code` (UK)
+- ✅ Gold layer granularity: **hourly** (machine × hour)
+- ✅ Prediction horizon: **24-hour failure window**
+- ✅ Deduplication and missing value handling rules applied at Silver layer
+- ✅ Temporal train/validation/test splits preserved in `split_set` field
+
+## Contributing
+
+To contribute improvements to the pipeline:
+
+1. Update relevant pipeline modules in `src/indusense/pipeline/`
+2. Create database migrations with Alembic if schema changes are needed
+3. Update test coverage and data quality rules
+4. Document changes in appropriate processing/reporting modules
+
+## License
+
+See project documentation for licensing information.
